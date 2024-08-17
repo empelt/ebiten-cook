@@ -20,12 +20,13 @@ const (
 type Game struct {
 	touchIDs []ebiten.TouchID
 	strokes  map[*Stroke]struct{}
-	sprite   *Sprite
+	food     *Food
 }
 
 var (
-	ebitenImage      *ebiten.Image
-	ebitenAlphaImage *image.Alpha
+	foodImage      *ebiten.Image
+	foodAlphaImage *image.Alpha
+	targets        []*Sprite
 )
 
 func resizeImage(img image.Image, width, height int) image.Image {
@@ -34,70 +35,108 @@ func resizeImage(img image.Image, width, height int) image.Image {
 	return newImage
 }
 
-func init() {
-	file, _ := os.Open("assets/images/cook.png")
+func newImageWithSize(path string, width, height int) (*ebiten.Image, *image.Alpha, error) {
+	file, _ := os.Open(path)
 	defer file.Close()
 
 	img, err := png.Decode(file)
 	if err != nil {
-		panic(err)
+		return nil, nil, err
 	}
 
-	img = resizeImage(img, 50, 50)
+	img = resizeImage(img, width, height)
 
-	ebitenImage = ebiten.NewImageFromImage(img)
+	ebitenImage := ebiten.NewImageFromImage(img)
 
 	// Clone an image but only with alpha values.
 	// This is used to detect a user cursor touches the image.
 	b := img.Bounds()
-	ebitenAlphaImage = image.NewAlpha(b)
+	ebitenAlphaImage := image.NewAlpha(b)
 	for j := b.Min.Y; j < b.Max.Y; j++ {
 		for i := b.Min.X; i < b.Max.X; i++ {
 			ebitenAlphaImage.Set(i, j, img.At(i, j))
 		}
 	}
+	return ebitenImage, ebitenAlphaImage, nil
+}
+
+func init() {
+	foodImage_, foodAlphaImage_, err := newImageWithSize("assets/images/cook.png", 50, 50)
+	if err != nil {
+		log.Fatal(err)
+	}
+	foodImage = foodImage_
+	foodAlphaImage = foodAlphaImage_
+
+	plateImg, plateAlphaImage, err := newImageWithSize("assets/images/plate.png", 60, 60)
+	if err != nil {
+		log.Fatal(err)
+	}
+	plate := &Sprite{
+		image:      plateImg,
+		alphaImage: plateAlphaImage,
+		x:          100,
+		y:          100,
+	}
+	plate2 := &Sprite{
+		image:      plateImg,
+		alphaImage: plateAlphaImage,
+		x:          200,
+		y:          200,
+	}
+	plate3 := &Sprite{
+		image:      plateImg,
+		alphaImage: plateAlphaImage,
+		x:          300,
+		y:          300,
+	}
+
+	targets = append(targets, plate, plate2, plate3)
 }
 
 func NewGame() *Game {
-	w, h := ebitenImage.Bounds().Dx(), ebitenImage.Bounds().Dy()
-	s := &Sprite{
-		image:      ebitenImage,
-		alphaImage: ebitenAlphaImage,
-		x:          rand.Intn(screenWidth - w),
-		y:          rand.Intn(screenHeight - h),
+	w, h := foodImage.Bounds().Dx(), foodImage.Bounds().Dy()
+	f := &Food{
+		Sprite: &Sprite{
+			image:      foodImage,
+			alphaImage: foodAlphaImage,
+			x:          rand.Intn(screenWidth - w),
+			y:          rand.Intn(screenHeight - h),
+		},
+		dragged: false,
 	}
 
 	return &Game{
 		strokes: map[*Stroke]struct{}{},
-		sprite:  s,
+		food:    f,
 	}
 }
 
-func (g *Game) spriteAt(x, y int) *Sprite {
-	if g.sprite.In(x, y) {
-		return g.sprite
+func (g *Game) foodAt(x, y int) *Food {
+	if g.food.In(x, y) {
+		return g.food
 	}
 	return nil
 }
 
 func (g *Game) Update() error {
 	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
-		if sp := g.spriteAt(ebiten.CursorPosition()); sp != nil {
-			s := NewStroke(&MouseStrokeSource{}, sp)
+		if f := g.foodAt(ebiten.CursorPosition()); f != nil {
+			s := NewStroke(&MouseStrokeSource{}, f, targets)
 			g.strokes[s] = struct{}{}
 		}
 	}
 	g.touchIDs = inpututil.AppendJustPressedTouchIDs(g.touchIDs[:0])
 	for _, id := range g.touchIDs {
-		if sp := g.spriteAt(ebiten.TouchPosition(id)); sp != nil {
-			s := NewStroke(&TouchStrokeSource{id}, sp)
+		if f := g.foodAt(ebiten.TouchPosition(id)); f != nil {
+			s := NewStroke(&TouchStrokeSource{id}, f, targets)
 			g.strokes[s] = struct{}{}
 		}
 	}
 
 	for s := range g.strokes {
 		s.Update()
-		if !s.sprite.dragged {
+		if !s.food.dragged {
 			delete(g.strokes, s)
 		}
 	}
@@ -105,10 +144,13 @@ func (g *Game) Update() error {
 }
 
 func (g *Game) Draw(screen *ebiten.Image) {
-	if g.sprite.dragged {
-		g.sprite.Draw(screen, 0.5)
+	for t := range targets {
+		targets[t].Draw(screen, 1)
+	}
+	if g.food.dragged {
+		g.food.Draw(screen, 0.5)
 	} else {
-		g.sprite.Draw(screen, 1)
+		g.food.Draw(screen, 1)
 	}
 }
 

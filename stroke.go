@@ -1,6 +1,5 @@
 package main
 
-// Stroke manages the current drag state by mouse.
 type Stroke struct {
 	source StrokeSource
 
@@ -8,36 +7,52 @@ type Stroke struct {
 	offsetX int
 	offsetY int
 
-	// sprite represents a sprite being dragged.
-	sprite *Sprite
+	initX int
+	initY int
+
+	food *Food
+
+	targets []*Sprite
 }
 
-func NewStroke(source StrokeSource, sprite *Sprite) *Stroke {
-	sprite.dragged = true
+func NewStroke(source StrokeSource, food *Food, targets []*Sprite) *Stroke {
+	food.dragged = true
 	x, y := source.Position()
 	return &Stroke{
 		source:  source,
-		offsetX: x - sprite.x,
-		offsetY: y - sprite.y,
-		sprite:  sprite,
+		offsetX: x - food.x,
+		offsetY: y - food.y,
+		initX:   food.x,
+		initY:   food.y,
+		food:    food,
+		targets: targets,
 	}
 }
 
 func (s *Stroke) Update() {
-	if !s.sprite.dragged {
+	if !s.food.dragged {
 		return
 	}
 	if s.source.IsJustReleased() {
-		s.sprite.dragged = false
+		s.food.dragged = false
+
+		for _, t := range s.targets {
+			if t.In(s.source.Position()) {
+				s.food.MoveTo(t.x, t.y)
+				return
+			}
+		}
+
+		s.food.MoveTo(s.initX, s.initY)
 		return
 	}
 
 	x, y := s.source.Position()
 	x -= s.offsetX
 	y -= s.offsetY
-	s.sprite.MoveTo(x, y)
+	s.food.MoveTo(x, y)
 }
 
-func (s *Stroke) Sprite() *Sprite {
-	return s.sprite
+func (s *Stroke) Food() *Food {
+	return s.food
 }

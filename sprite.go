@@ -12,7 +12,6 @@ type Sprite struct {
 	alphaImage *image.Alpha
 	x          int
 	y          int
-	dragged    bool
 }
 
 // In returns true if (x, y) is in the sprite, and false otherwise.
@@ -52,4 +51,9 @@ func (s *Sprite) Draw(screen *ebiten.Image, alpha float32) {
 	op.GeoM.Translate(float64(s.x), float64(s.y))
 	op.ColorScale.ScaleAlpha(alpha)
 	screen.DrawImage(s.image, op)
+}
+
+type Food struct {
+	*Sprite
+	dragged bool
 }
