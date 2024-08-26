@@ -21,12 +21,13 @@ type Game struct {
 	touchIDs []ebiten.TouchID
 	strokes  map[*Stroke]struct{}
 	food     *Food
+	oven     *JetOven
 }
 
 var (
 	foodImage      *ebiten.Image
 	foodAlphaImage *image.Alpha
-	targets        []*Sprite
+	plates         []*Plate
 )
 
 func resizeImage(img image.Image, width, height int) image.Image {
@@ -72,26 +73,38 @@ func init() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	plate := &Sprite{
-		image:      plateImg,
-		alphaImage: plateAlphaImage,
-		x:          100,
-		y:          100,
+	plate := &Plate{
+		Sprite: &Sprite{
+			image:      plateImg,
+			alphaImage: plateAlphaImage,
+			x:          100,
+			y:          100,
+		},
+		foods:     []*Food{},
+		draggable: false,
 	}
-	plate2 := &Sprite{
-		image:      plateImg,
-		alphaImage: plateAlphaImage,
-		x:          200,
-		y:          200,
+	plate2 := &Plate{
+		Sprite: &Sprite{
+			image:      plateImg,
+			alphaImage: plateAlphaImage,
+			x:          200,
+			y:          200,
+		},
+		foods:     []*Food{},
+		draggable: false,
 	}
-	plate3 := &Sprite{
-		image:      plateImg,
-		alphaImage: plateAlphaImage,
-		x:          300,
-		y:          300,
+	plate3 := &Plate{
+		Sprite: &Sprite{
+			image:      plateImg,
+			alphaImage: plateAlphaImage,
+			x:          300,
+			y:          300,
+		},
+		foods:     []*Food{},
+		draggable: false,
 	}
 
-	targets = append(targets, plate, plate2, plate3)
+	plates = append(plates, plate, plate2, plate3)
 }
 
 func NewGame() *Game {
@@ -103,40 +116,54 @@ func NewGame() *Game {
 			x:          rand.Intn(screenWidth - w),
 			y:          rand.Intn(screenHeight - h),
 		},
-		dragged: false,
+		dragged:   false,
+		draggable: true,
 	}
+
+	ovenImg, ovenAlphaImage, err := newImageWithSize("assets/images/oven.png", 300, 200)
+	if err != nil {
+		log.Fatal(err)
+	}
+	oven := NewJetOven(ovenImg, ovenAlphaImage, 50, 50, 1)
 
 	return &Game{
 		strokes: map[*Stroke]struct{}{},
 		food:    f,
+		oven:    oven,
 	}
 }
 
-func (g *Game) foodAt(x, y int) *Food {
-	if g.food.In(x, y) {
+func (g *Game) dragItemAt(x, y int) DraggableSprite {
+	if g.food.In(x, y) && g.food.GetDraggable() {
 		return g.food
+	}
+	for _, p := range plates {
+		if p.In(x, y) && p.GetDraggable() {
+			return p
+		}
 	}
 	return nil
 }
 
 func (g *Game) Update() error {
+	g.oven.Update()
 	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
-		if f := g.foodAt(ebiten.CursorPosition()); f != nil {
-			s := NewStroke(&MouseStrokeSource{}, f, targets)
+		if ds := g.dragItemAt(ebiten.CursorPosition()); ds != nil {
+			s := NewStroke(&MouseStrokeSource{}, ds, g.oven, plates)
 			g.strokes[s] = struct{}{}
 		}
 	}
 	g.touchIDs = inpututil.AppendJustPressedTouchIDs(g.touchIDs[:0])
 	for _, id := range g.touchIDs {
-		if f := g.foodAt(ebiten.TouchPosition(id)); f != nil {
-			s := NewStroke(&TouchStrokeSource{id}, f, targets)
+		if ds := g.dragItemAt(ebiten.TouchPosition(id)); ds != nil {
+			s := NewStroke(&TouchStrokeSource{id}, ds, g.oven, plates)
 			g.strokes[s] = struct{}{}
 		}
 	}
 
 	for s := range g.strokes {
 		s.Update()
-		if !s.food.dragged {
+		if !s.dragItem.GetDragged() {
 			delete(g.strokes, s)
 		}
 	}
@@ -144,14 +171,15 @@ func (g *Game) Update() error {
 }
 
 func (g *Game) Draw(screen *ebiten.Image) {
-	for t := range targets {
-		targets[t].Draw(screen, 1)
+	for t := range plates {
+		plates[t].Draw(screen, 1)
 	}
 	if g.food.dragged {
 		g.food.Draw(screen, 0.5)
 	} else {
 		g.food.Draw(screen, 1)
 	}
+	g.oven.Draw(screen, 1)
 }
 
 func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
